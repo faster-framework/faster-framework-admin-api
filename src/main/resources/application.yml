@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: faster-admin-api
+  profiles:
+    include:
+      - web
+      - mybatis
+      - admin
+app:
+  group: faster-admin
