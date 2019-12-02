@@ -3,6 +3,7 @@ package cn.org.faster.framework.admin.dict.controller;
 import cn.org.faster.framework.admin.dict.entity.SysDict;
 import cn.org.faster.framework.admin.dict.model.SysDictReq;
 import cn.org.faster.framework.admin.dict.service.DictService;
+import cn.org.faster.framework.dict.facade.DictFacade;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,15 @@ import java.util.List;
 public class DictController {
     @Autowired
     private DictService dictService;
+    /**
+     * 字典全部列表
+     *
+     * @return ResponseEntity
+     */
+    @GetMapping("/all")
+    public ResponseEntity listAll() {
+        return ResponseEntity.ok(DictFacade.listAll());
+    }
 
     /**
      * 字典分页列表

@@ -17,6 +17,10 @@
         </dependency>
         <dependency>
             <groupId>cn.org.faster</groupId>
+            <artifactId>spring-boot-starter-dict</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.org.faster</groupId>
             <artifactId>spring-boot-starter-mybatis</artifactId>
         </dependency>
         <dependency>
