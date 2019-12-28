@@ -1,5 +1,6 @@
 package cn.org.faster.framework.admin.dict.model;
 
+import cn.org.faster.framework.mybatis.entity.BaseEntity;
 import lombok.Data;
 
 import javax.validation.constraints.NotBlank;
@@ -9,7 +10,7 @@ import javax.validation.constraints.NotBlank;
  * @since 2019-10-31
  */
 @Data
-public class SysDictReq {
+public class SysDictReq extends BaseEntity {
     /**
      * 字典key
      */
