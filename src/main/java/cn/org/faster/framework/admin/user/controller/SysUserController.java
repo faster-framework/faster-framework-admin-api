@@ -22,7 +22,7 @@ import java.util.List;
  * @author zhangbowen
  */
 @RestController
-@RequestMapping("/sys/users")
+@RequestMapping("/admin/sys/users")
 public class SysUserController {
     @Autowired
     private SysUserService sysUserService;

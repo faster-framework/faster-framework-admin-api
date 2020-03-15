@@ -18,7 +18,7 @@ import java.util.List;
  * @author zhangbowen
  */
 @RestController
-@RequestMapping("/sys/permissions")
+@RequestMapping("/admin/sys/permissions")
 public class SysPermissionController {
     @Autowired
     private SysPermissionService sysPermissionService;

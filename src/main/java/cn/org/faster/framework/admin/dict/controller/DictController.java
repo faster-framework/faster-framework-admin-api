@@ -19,7 +19,7 @@ import java.util.List;
  * 字典Controller
  */
 @RestController
-@RequestMapping("/sys/dict")
+@RequestMapping("/admin/sys/dict")
 public class DictController {
     @Autowired
     private DictService dictService;
