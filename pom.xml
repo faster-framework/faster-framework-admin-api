@@ -6,7 +6,7 @@
     <parent>
         <groupId>cn.org.faster</groupId>
         <artifactId>spring-boot-starters</artifactId>
-        <version>1.3.7.RELEASE</version>
+        <version>1.3.8.RELEASE</version>
     </parent>
     <artifactId>faster-framework-admin-api</artifactId>
     <version>1.0-SNAPSHOT</version>
