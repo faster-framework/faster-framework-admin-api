@@ -127,7 +127,7 @@ CREATE TABLE `sys_user` (
   `sort` int(11) NOT NULL DEFAULT '0' COMMENT '排序',
   `remark` varchar(10240) DEFAULT NULL COMMENT '备注',
   `deleted` tinyint(4) NOT NULL DEFAULT '0' COMMENT '是否删除（0.,否 1.是）',
-  PRIMARY KEY (`id`),
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC COMMENT='用户表';
 
 -- ----------------------------
