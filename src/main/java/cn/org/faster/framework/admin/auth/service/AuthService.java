@@ -108,7 +108,7 @@ public class AuthService {
         Long userId = WebContextFacade.getRequestContext().getUserId();
         SysUser sysUser = sysUserService.getById(userId);
         if (sysUser == null) {
-            return new UserInfoRes();
+            return null;
         }
         UserInfoRes userInfoRes = new UserInfoRes();
         userInfoRes.setName(sysUser.getName());
