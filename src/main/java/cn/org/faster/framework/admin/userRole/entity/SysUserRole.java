@@ -1,18 +1,21 @@
 package cn.org.faster.framework.admin.userRole.entity;
 
-import cn.org.faster.framework.mybatis.entity.BaseEntity;
+import cn.org.faster.framework.admin.common.entity.BaseEntity;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-import javax.validation.constraints.NotNull;
-
 /**
+ * 用户-角色关系。
+ *
  * @author zhangbowen
  */
-@EqualsAndHashCode(callSuper = true)
 @Data
+@EqualsAndHashCode(callSuper = true)
 public class SysUserRole extends BaseEntity {
+
     private Long userId;
+
     @NotNull(message = "请选择角色")
     private Long roleId;
 }

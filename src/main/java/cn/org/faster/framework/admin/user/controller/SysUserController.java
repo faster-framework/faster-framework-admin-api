@@ -1,154 +1,101 @@
 package cn.org.faster.framework.admin.user.controller;
 
+import cn.org.faster.framework.admin.common.model.ListWrapper;
+import cn.org.faster.framework.admin.common.model.PageResult;
 import cn.org.faster.framework.admin.user.entity.SysUser;
 import cn.org.faster.framework.admin.user.model.SysUserAddReq;
 import cn.org.faster.framework.admin.user.model.SysUserChangePwdReq;
 import cn.org.faster.framework.admin.user.model.SysUserUpdateReq;
+import cn.org.faster.framework.admin.user.model.UserQuery;
 import cn.org.faster.framework.admin.user.service.SysUserService;
 import cn.org.faster.framework.admin.userRole.entity.SysUserRole;
-import cn.org.faster.framework.admin.userRole.service.SysUserRoleService;
-import cn.org.faster.framework.web.model.ListWrapper;
-import org.apache.shiro.authz.annotation.RequiresPermissions;
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
+ * 用户管理接口。
+ *
  * @author zhangbowen
  */
 @RestController
 @RequestMapping("/admin/sys/users")
 public class SysUserController {
-    @Autowired
-    private SysUserService sysUserService;
-    @Autowired
-    private SysUserRoleService sysUserRoleService;
 
-    /**
-     * @param sysUser 用户实体
-     * @return 用户分页列表
-     */
+    private final SysUserService userService;
+
+    public SysUserController(SysUserService userService) {
+        this.userService = userService;
+    }
+
     @GetMapping
-    @RequiresPermissions("users:list")
-    public ResponseEntity list(SysUser sysUser) {
-        return ResponseEntity.ok(sysUserService.list(sysUser));
+    @PreAuthorize("hasAuthority('users:list')")
+    public PageResult<SysUser> list(@ModelAttribute UserQuery query) {
+        return userService.list(query);
     }
 
-    /**
-     * @param userId 用户id
-     * @return 用户详情
-     */
     @GetMapping("/{userId}")
-    @RequiresPermissions("users:info")
-    public ResponseEntity info(@PathVariable Long userId) {
-        return ResponseEntity.ok(sysUserService.info(userId));
+    @PreAuthorize("hasAuthority('users:info')")
+    public SysUser info(@PathVariable long userId) {
+        return userService.info(userId);
     }
 
-    /**
-     * 添加用户
-     *
-     * @param sysUserAddReq 添加用户实体
-     * @return ResponseEntity
-     */
     @PostMapping
-    @RequiresPermissions("users:add")
-    public ResponseEntity add(@RequestBody @Validated SysUserAddReq sysUserAddReq) {
-        SysUser sysUser = new SysUser();
-        BeanUtils.copyProperties(sysUserAddReq, sysUser);
-        return sysUserService.add(sysUser);
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('users:add')")
+    public void add(@Valid @RequestBody SysUserAddReq request) {
+        userService.add(request);
     }
 
-    /**
-     * 编辑用户
-     *
-     * @param sysUserUpdateReq 编辑用户
-     * @param userId           用户id
-     * @return ResponseEntity
-     */
     @PutMapping("/{userId}")
-    @RequiresPermissions("users:modify")
-    public ResponseEntity update(@RequestBody SysUserUpdateReq sysUserUpdateReq, @PathVariable Long userId) {
-        SysUser sysUser = new SysUser();
-        BeanUtils.copyProperties(sysUserUpdateReq, sysUser);
-        sysUser.setId(userId);
-        sysUserService.update(sysUser);
-        return new ResponseEntity(HttpStatus.CREATED);
+    @PreAuthorize("hasAuthority('users:modify')")
+    public void update(@PathVariable long userId, @Valid @RequestBody SysUserUpdateReq request) {
+        userService.update(userId, request);
     }
 
-    /**
-     * 删除用户
-     *
-     * @param userIds 用户id列表
-     * @return ResponseEntity
-     */
     @DeleteMapping("/delete")
-    @RequiresPermissions("users:delete")
-    public ResponseEntity delete(@RequestBody List<Long> userIds) {
-        userIds.forEach(item -> {
-            if (item == 0L) {
-                return;
-            }
-            sysUserService.delete(item);
-        });
-        return new ResponseEntity(HttpStatus.CREATED);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('users:delete')")
+    public void delete(@RequestBody List<Long> userIds) {
+        userService.delete(userIds);
     }
 
-
-    /**
-     * 修改密码
-     *
-     * @param sysUserChangePwdReq 修改密码实体
-     * @param userId              用户id
-     * @return ResponseEntity
-     */
     @PutMapping("/{userId}/password/change")
-    @RequiresPermissions("users:password:change")
-    public ResponseEntity changePwd(@Validated @RequestBody SysUserChangePwdReq sysUserChangePwdReq, @PathVariable Long userId) {
-        return sysUserService.changePwd(sysUserChangePwdReq, userId);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('users:password:change')")
+    public void changePassword(@PathVariable long userId, @Valid @RequestBody SysUserChangePwdReq request) {
+        userService.changePassword(userId, request);
     }
 
-    /**
-     * 重置密码
-     *
-     * @param userId 用户id
-     * @return ResponseEntity
-     */
     @PutMapping("/{userId}/password/reset")
-    @RequiresPermissions("users:password:reset")
-    public ResponseEntity resetPwd(@PathVariable Long userId) {
-        sysUserService.resetPwd(userId);
-        return new ResponseEntity(HttpStatus.CREATED);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('users:password:reset')")
+    public void resetPassword(@PathVariable long userId) {
+        userService.resetPassword(userId);
     }
 
-    /**
-     * 批量选择角色
-     *
-     * @param list   角色列表 id
-     * @param userId 用户id
-     * @return ResponseEntity
-     */
     @PutMapping("/{userId}/roles/choose")
-    @RequiresPermissions("users:roles:choose")
-    public ResponseEntity chooseRoles(@Validated @RequestBody ListWrapper<SysUserRole> list, @PathVariable Long userId) {
-        sysUserRoleService.batchChoose(list.getList(), userId);
-        return new ResponseEntity(HttpStatus.CREATED);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('users:roles:choose')")
+    public void chooseRoles(@PathVariable long userId, @Valid @RequestBody ListWrapper<SysUserRole> body) {
+        userService.chooseRoles(userId, body.list());
     }
 
-    /**
-     * 获取用户的角色id列表
-     *
-     * @param userId 用户id
-     * @return 角色ids列表
-     */
     @GetMapping("/{userId}/roles")
-    @RequiresPermissions("users:roles:list")
-    public ResponseEntity roles(@PathVariable Long userId) {
-        return ResponseEntity.ok(sysUserRoleService.roles(userId));
+    @PreAuthorize("hasAuthority('users:roles:list')")
+    public List<Long> roles(@PathVariable long userId) {
+        return userService.roles(userId);
     }
-
 }

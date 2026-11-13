@@ -1,118 +1,84 @@
 package cn.org.faster.framework.admin.dict.controller;
 
+import cn.org.faster.framework.admin.common.model.PageResult;
 import cn.org.faster.framework.admin.dict.entity.SysDict;
+import cn.org.faster.framework.admin.dict.model.DictQuery;
 import cn.org.faster.framework.admin.dict.model.SysDictReq;
 import cn.org.faster.framework.admin.dict.service.DictService;
-import cn.org.faster.framework.dict.facade.DictFacade;
-import org.apache.shiro.authz.annotation.RequiresPermissions;
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
+ * 字典接口。
+ *
  * @author faster-builder
- * 字典Controller
  */
 @RestController
 @RequestMapping("/admin/sys/dict")
 public class DictController {
-    @Autowired
-    private DictService dictService;
+
+    private final DictService dictService;
+
+    public DictController(DictService dictService) {
+        this.dictService = dictService;
+    }
+
     /**
-     * 字典全部列表
-     *
-     * @return ResponseEntity
+     * 字典全量列表（登录即可访问，供下拉框等通用场景使用）。
      */
     @GetMapping("/all")
-    public ResponseEntity listAll() {
-        return ResponseEntity.ok(DictFacade.listAll());
+    public List<SysDict> listAll() {
+        return dictService.listAll();
     }
 
-    /**
-     * 字典分页列表
-     *
-     * @param sysDict 字典实体
-     * @return ResponseEntity
-     */
     @GetMapping
-    @RequiresPermissions("dict:list")
-    public ResponseEntity list(SysDict sysDict) {
-        return ResponseEntity.ok(dictService.list(sysDict));
+    @PreAuthorize("hasAuthority('dict:list')")
+    public PageResult<SysDict> list(@ModelAttribute DictQuery query) {
+        return dictService.list(query);
     }
 
-    /**
-     * 字典根据id查询详情
-     *
-     * @param id 主键id
-     * @return ResponseEntity
-     */
     @GetMapping("/{id}")
-    @RequiresPermissions("dict:info")
-    public ResponseEntity queryById(@PathVariable Long id) {
-        return ResponseEntity.ok(dictService.queryById(id));
+    @PreAuthorize("hasAuthority('dict:info')")
+    public SysDict info(@PathVariable long id) {
+        return dictService.info(id);
     }
 
-    /**
-     * 字典根据条件查询详情
-     * @param sysDict 请求
-     * @return ResponseEntity
-     */
     @GetMapping("/query")
-    @RequiresPermissions("dict:info")
-    public ResponseEntity query(SysDict sysDict) {
-        return ResponseEntity.ok(dictService.query(sysDict));
+    @PreAuthorize("hasAuthority('dict:info')")
+    public SysDict query(@ModelAttribute DictQuery query) {
+        return dictService.query(query);
     }
 
-    /**
-     * 新增字典
-     *
-     * @param request 请求参数
-     * @return ResponseEntity
-     */
     @PostMapping
-    @RequiresPermissions("dict:add")
-    public ResponseEntity add(@Validated @RequestBody SysDictReq request) {
-        SysDict insert = new SysDict();
-        BeanUtils.copyProperties(request, insert);
-        return dictService.add(insert);
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('dict:add')")
+    public void add(@Valid @RequestBody SysDictReq request) {
+        dictService.add(request);
     }
 
-    /**
-     * 更新字典
-     *
-     * @param request 请求参数
-     * @param id 主键id
-     * @return ResponseEntity
-     */
     @PutMapping("/{id}")
-    @RequiresPermissions("dict:modify")
-    public ResponseEntity update(@RequestBody SysDictReq request, @PathVariable Long id) {
-        SysDict update = new SysDict();
-        BeanUtils.copyProperties(request, update);
-        update.setId(id);
-        return dictService.update(update);
+    @PreAuthorize("hasAuthority('dict:modify')")
+    public void update(@PathVariable long id, @Valid @RequestBody SysDictReq request) {
+        dictService.update(id, request);
     }
 
-    /**
-     * 删除字典
-     *
-     * @param ids 主键id列表
-     * @return ResponseEntity
-     */
     @DeleteMapping("/delete")
-    @RequiresPermissions("dict:delete")
-    public ResponseEntity delete(@RequestBody List<Long> ids) {
-        ids.forEach(item -> {
-            if (item == 0L) {
-                return;
-            }
-            dictService.delete(item);
-        });
-        return new ResponseEntity(HttpStatus.NO_CONTENT);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('dict:delete')")
+    public void delete(@RequestBody List<Long> ids) {
+        dictService.delete(ids);
     }
 }

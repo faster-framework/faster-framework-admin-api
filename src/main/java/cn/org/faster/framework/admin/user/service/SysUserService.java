@@ -1,125 +1,158 @@
 package cn.org.faster.framework.admin.user.service;
 
-import cn.org.faster.framework.admin.shiro.ShiroRealm;
+import cn.org.faster.framework.admin.common.error.BusinessException;
+import cn.org.faster.framework.admin.common.model.PageResult;
+import cn.org.faster.framework.admin.common.util.AuditSupport;
+import cn.org.faster.framework.admin.permission.service.PermissionService;
+import cn.org.faster.framework.admin.security.AuthProperties;
+import cn.org.faster.framework.admin.security.TokenRegistry;
 import cn.org.faster.framework.admin.user.entity.SysUser;
 import cn.org.faster.framework.admin.user.error.UserError;
-import cn.org.faster.framework.admin.user.mapper.SysUserMapper;
+import cn.org.faster.framework.admin.user.model.SysUserAddReq;
 import cn.org.faster.framework.admin.user.model.SysUserChangePwdReq;
+import cn.org.faster.framework.admin.user.model.SysUserUpdateReq;
+import cn.org.faster.framework.admin.user.model.UserQuery;
+import cn.org.faster.framework.admin.user.repository.SysUserRepository;
+import cn.org.faster.framework.admin.userRole.entity.SysUserRole;
 import cn.org.faster.framework.admin.userRole.service.SysUserRoleService;
-import cn.org.faster.framework.core.utils.Utils;
-import cn.org.faster.framework.mybatis.entity.BaseEntity;
-import cn.org.faster.framework.web.context.model.SpringAppContextFacade;
-import cn.org.faster.framework.web.exception.model.ResponseErrorEntity;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
+
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
+ * 用户管理服务。
+ *
  * @author zhangbowen
  */
 @Service
 @Transactional
-public class SysUserService extends ServiceImpl<SysUserMapper, SysUser> {
-    @Autowired
-    private SysUserRoleService sysUserRoleService;
+public class SysUserService {
 
     /**
-     * @param sysUser 用户实体
-     * @return 分页列表
+     * 超级管理员用户 id。
      */
-    public IPage<SysUser> list(SysUser sysUser) {
-        LambdaQueryWrapper<SysUser> queryWrapper = new LambdaQueryWrapper<>();
-        if (!StringUtils.isEmpty(sysUser.getName())) {
-            queryWrapper.likeRight(SysUser::getName, sysUser.getName());
+    public static final long ADMIN_USER_ID = 0L;
+
+    private final SysUserRepository userRepository;
+
+    private final SysUserRoleService userRoleService;
+
+    private final PermissionService permissionService;
+
+    private final PasswordEncoder passwordEncoder;
+
+    private final AuthProperties authProperties;
+
+    private final TokenRegistry tokenRegistry;
+
+    private final AuditSupport auditSupport;
+
+    private final Clock clock;
+
+    public SysUserService(SysUserRepository userRepository, SysUserRoleService userRoleService,
+                          PermissionService permissionService, PasswordEncoder passwordEncoder,
+                          AuthProperties authProperties, TokenRegistry tokenRegistry,
+                          AuditSupport auditSupport, Clock clock) {
+        this.userRepository = userRepository;
+        this.userRoleService = userRoleService;
+        this.permissionService = permissionService;
+        this.passwordEncoder = passwordEncoder;
+        this.authProperties = authProperties;
+        this.tokenRegistry = tokenRegistry;
+        this.auditSupport = auditSupport;
+        this.clock = clock;
+    }
+
+    @Transactional(readOnly = true)
+    public PageResult<SysUser> list(UserQuery query) {
+        List<SysUser> records = userRepository.page(query.getName(), query.getSize(), query.offset());
+        long total = userRepository.count(query.getName());
+        return PageResult.of(records, total, query);
+    }
+
+    @Transactional(readOnly = true)
+    public SysUser info(long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> BusinessException.notFound(UserError.USER_NOT_EXIST));
+    }
+
+    public void add(SysUserAddReq request) {
+        if (userRepository.existsAccount(request.account(), null)) {
+            throw BusinessException.conflict(UserError.USER_EXIST);
         }
-        return super.baseMapper.selectPage(sysUser.toPage(), queryWrapper.orderByDesc(BaseEntity::getCreateDate));
+        SysUser user = new SysUser();
+        user.setAccount(request.account());
+        user.setPassword(passwordEncoder.encode(request.password()));
+        user.setName(request.name());
+        auditSupport.markCreated(user);
+        userRepository.insert(user);
+    }
+
+    public void update(long userId, SysUserUpdateReq request) {
+        info(userId);
+        userRepository.updateName(userId, request.name(), auditSupport.currentUserId(), LocalDateTime.now(clock));
     }
 
     /**
-     * @param id 用户id
-     * @return 用户详情
+     * 批量删除用户（超级管理员不可删除）。
+     *
+     * @param userIds 用户 id 列表
      */
-    public SysUser info(Long id) {
-        return super.baseMapper.selectById(id);
-    }
-
-    /**
-     * @param sysUser 新增用户
-     * @return ResponseEntity
-     */
-    public ResponseEntity add(SysUser sysUser) {
-        //判断当前用户是否存在
-        SysUser exist = super.baseMapper.selectOne(new LambdaQueryWrapper<SysUser>().eq(SysUser::getAccount, sysUser.getAccount()));
-        if (exist != null) {
-            return ResponseErrorEntity.error(UserError.USER_EXIST, HttpStatus.BAD_REQUEST);
+    public void delete(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return;
         }
-        sysUser.setPassword(Utils.md5(sysUser.getPassword()));
-        sysUser.preInsert();
-        super.baseMapper.insert(sysUser);
-        return new ResponseEntity(HttpStatus.CREATED);
-    }
-
-    /**
-     * 更新用户
-     *
-     * @param sysUser 用户实体
-     */
-    public void update(SysUser sysUser) {
-        sysUser.preUpdate();
-        super.baseMapper.updateById(sysUser);
-    }
-
-    /**
-     * 删除用户
-     *
-     * @param userId 用户id
-     */
-    public void delete(Long userId) {
-        super.baseMapper.deleteById(userId);
-        //删除用户角色关系
-        sysUserRoleService.deleteByUserId(userId);
-        //清空缓存
-        SpringAppContextFacade.applicationContext.getBean(ShiroRealm.class).getAuthorizationCache().clear();
-    }
-
-    /**
-     * 修改密码
-     *
-     * @param sysUserChangePwdReq 修改密码实体
-     * @param userId              用户id
-     * @return ResponseEntity
-     */
-    public ResponseEntity changePwd(SysUserChangePwdReq sysUserChangePwdReq, Long userId) {
-        SysUser existUser = super.baseMapper.selectById(userId);
-        if (existUser == null) {
-            return ResponseErrorEntity.error(UserError.USER_NOT_EXIST, HttpStatus.NOT_FOUND);
+        for (Long userId : userIds) {
+            if (userId != null && userId == ADMIN_USER_ID) {
+                throw BusinessException.badRequest(UserError.ADMIN_CANNOT_DELETE);
+            }
         }
-        if (!existUser.getPassword().equals(Utils.md5(sysUserChangePwdReq.getOldPwd()))) {
-            return ResponseErrorEntity.error(UserError.OLD_PASSWORD_ERROR, HttpStatus.BAD_REQUEST);
+        List<Long> deletable = userIds.stream().filter(java.util.Objects::nonNull).toList();
+        userRepository.softDelete(deletable, auditSupport.currentUserId(), LocalDateTime.now(clock));
+        for (Long userId : deletable) {
+            userRoleService.deleteByUserId(userId);
+            tokenRegistry.revokeAll(userId);
+            permissionService.evict(userId);
         }
-        SysUser update = new SysUser();
-        update.setPassword(Utils.md5(sysUserChangePwdReq.getPassword()));
-        update.setId(userId);
-        update.preUpdate();
-        super.baseMapper.updateById(update);
-        return new ResponseEntity(HttpStatus.CREATED);
     }
 
     /**
-     * 重置密码
-     *
-     * @param userId 用户id
+     * 用户自行修改密码：校验旧密码，修改后强制所有令牌失效。
      */
-    public void resetPwd(Long userId) {
-        SysUser update = new SysUser();
-        update.setPassword(Utils.md5("123456"));
-        update.setId(userId);
-        this.update(update);
+    public void changePassword(long userId, SysUserChangePwdReq request) {
+        SysUser user = info(userId);
+        if (!passwordEncoder.matches(request.oldPwd(), user.getPassword())) {
+            throw BusinessException.badRequest(UserError.OLD_PASSWORD_ERROR);
+        }
+        if (passwordEncoder.matches(request.password(), user.getPassword())) {
+            throw BusinessException.badRequest(UserError.PASSWORD_NOT_CHANGED);
+        }
+        userRepository.updatePassword(userId, passwordEncoder.encode(request.password()),
+                auditSupport.currentUserId(), LocalDateTime.now(clock));
+        tokenRegistry.revokeAll(userId);
+    }
+
+    /**
+     * 管理员重置密码为配置的初始口令，并强制该用户所有令牌失效。
+     */
+    public void resetPassword(long userId) {
+        info(userId);
+        userRepository.updatePassword(userId, passwordEncoder.encode(authProperties.defaultPassword()),
+                auditSupport.currentUserId(), LocalDateTime.now(clock));
+        tokenRegistry.revokeAll(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> roles(long userId) {
+        return userRoleService.roles(userId);
+    }
+
+    public void chooseRoles(long userId, List<SysUserRole> roles) {
+        info(userId);
+        userRoleService.batchChoose(userId, roles);
     }
 }

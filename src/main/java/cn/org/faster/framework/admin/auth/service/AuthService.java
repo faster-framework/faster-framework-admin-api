@@ -4,115 +4,106 @@ import cn.org.faster.framework.admin.auth.error.AuthError;
 import cn.org.faster.framework.admin.auth.model.LoginReq;
 import cn.org.faster.framework.admin.auth.model.LoginRes;
 import cn.org.faster.framework.admin.auth.model.UserInfoRes;
-import cn.org.faster.framework.admin.shiro.ShiroRealm;
+import cn.org.faster.framework.admin.captcha.service.CaptchaProperties;
+import cn.org.faster.framework.admin.captcha.service.CaptchaService;
+import cn.org.faster.framework.admin.common.error.BusinessException;
+import cn.org.faster.framework.admin.permission.service.PermissionService;
+import cn.org.faster.framework.admin.security.IssuedToken;
+import cn.org.faster.framework.admin.security.TokenRegistry;
+import cn.org.faster.framework.admin.security.TokenService;
 import cn.org.faster.framework.admin.user.entity.SysUser;
-import cn.org.faster.framework.admin.user.service.SysUserService;
-import cn.org.faster.framework.core.utils.Utils;
-import cn.org.faster.framework.web.captcha.service.ICaptchaService;
-import cn.org.faster.framework.web.context.model.SpringAppContextFacade;
-import cn.org.faster.framework.web.context.model.WebContextFacade;
-import cn.org.faster.framework.web.exception.model.ResponseErrorEntity;
-import cn.org.faster.framework.web.jwt.service.JwtService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import org.apache.shiro.SecurityUtils;
-import org.apache.shiro.authc.AuthenticationToken;
-import org.apache.shiro.authz.AuthorizationInfo;
-import org.apache.shiro.cache.Cache;
-import org.apache.shiro.subject.PrincipalCollection;
-import org.apache.shiro.subject.Subject;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import cn.org.faster.framework.admin.user.error.UserError;
+import cn.org.faster.framework.admin.user.repository.SysUserRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
-
-import java.util.Collection;
-import java.util.Collections;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
+ * 认证服务：登录、登出、当前用户信息。
+ *
  * @author zhangbowen
  */
 @Service
 public class AuthService {
-    @Autowired
-    private SysUserService sysUserService;
-    @Autowired
-    private JwtService jwtService;
-    @Autowired
-    private ICaptchaService captchaService;
 
+    private final SysUserRepository userRepository;
 
-    /**
-     * 登录
-     *
-     * @param loginReq loginReq
-     * @return ResponseEntity
-     */
-    public ResponseEntity login(LoginReq loginReq) {
-        //验证图形验证码是否正确
-        if (!captchaService.valid(loginReq.getCaptcha(), loginReq.getCaptchaToken())) {
-            return ResponseErrorEntity.error(AuthError.CAPTCHA_ERROR, HttpStatus.NOT_FOUND);
-        }
-        SysUser existUser = sysUserService.getOne(new LambdaQueryWrapper<SysUser>().eq(SysUser::getAccount, loginReq.getAccount()));
-        if (existUser == null) {
-            return ResponseErrorEntity.error(AuthError.USER_NOT_EXIST, HttpStatus.NOT_FOUND);
-        }
-        if (!existUser.getPassword().equals(Utils.md5(loginReq.getPassword()))) {
-            return ResponseErrorEntity.error(AuthError.PASSWORD_ERROR, HttpStatus.NOT_FOUND);
-        }
-        String token = jwtService.createToken(existUser.getId().toString(), -1);
-        Subject subject = SecurityUtils.getSubject();
-        subject.login(new AuthenticationToken() {
-            @Override
-            public Object getPrincipal() {
-                return token;
-            }
+    private final PasswordEncoder passwordEncoder;
 
-            @Override
-            public Object getCredentials() {
-                return token;
-            }
-        });
-        LoginRes loginRes = new LoginRes();
-        loginRes.setToken(token);
-        return ResponseEntity.ok(loginRes);
+    private final CaptchaService captchaService;
+
+    private final CaptchaProperties captchaProperties;
+
+    private final TokenService tokenService;
+
+    private final TokenRegistry tokenRegistry;
+
+    private final PermissionService permissionService;
+
+    public AuthService(SysUserRepository userRepository, PasswordEncoder passwordEncoder,
+                       CaptchaService captchaService, CaptchaProperties captchaProperties,
+                       TokenService tokenService, TokenRegistry tokenRegistry,
+                       PermissionService permissionService) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.captchaService = captchaService;
+        this.captchaProperties = captchaProperties;
+        this.tokenService = tokenService;
+        this.tokenRegistry = tokenRegistry;
+        this.permissionService = permissionService;
     }
 
     /**
-     * 退出登录
+     * 登录：校验验证码 → 校验账号密码 → 签发 JWT。
      */
-    public void logout() {
-        PrincipalCollection principalCollection = SecurityUtils.getSubject().getPrincipals();
-        if (principalCollection != null) {
-            SpringAppContextFacade.applicationContext.getBean(ShiroRealm.class).getAuthorizationCache().remove(principalCollection);
+    @Transactional(readOnly = true)
+    public LoginRes login(LoginReq request) {
+        if (captchaProperties.enabled()
+                && !captchaService.validate(request.captcha(), request.captchaToken())) {
+            throw BusinessException.badRequest(AuthError.CAPTCHA_ERROR);
         }
+        // 账号不存在与密码错误返回同一错误码，避免用户名枚举
+        SysUser user = userRepository.findByAccount(request.account())
+                .filter(candidate -> passwordEncoder.matches(request.password(), candidate.getPassword()))
+                .orElseThrow(() -> BusinessException.unauthorized(AuthError.PASSWORD_ERROR));
+        IssuedToken token = tokenService.issue(user.getId(), user.getName());
+        return new LoginRes(token.value());
     }
 
     /**
-     * @return 获取当前用户所有权限code
+     * 登出：撤销当前令牌并清理权限缓存。
      */
-    private Collection<String> permissions() {
-        Cache<Object, AuthorizationInfo> cache = SpringAppContextFacade.applicationContext.getBean(ShiroRealm.class).getAuthorizationCache();
-        AuthorizationInfo authorizationInfo = cache.get(SecurityUtils.getSubject().getPrincipals());
-        //说明没有缓存，刷新缓存
-        if (authorizationInfo == null) {
-            SecurityUtils.getSubject().isPermitted("permissions");
-            authorizationInfo = cache.get(SecurityUtils.getSubject().getPrincipals());
+    public void logout(Authentication authentication) {
+        Jwt jwt = jwtOf(authentication);
+        if (jwt == null) {
+            return;
         }
-        return authorizationInfo == null ? Collections.emptyList() : authorizationInfo.getStringPermissions();
+        long userId = Long.parseLong(jwt.getSubject());
+        tokenRegistry.revoke(userId, jwt.getId(), jwt.getExpiresAt());
+        permissionService.evict(userId);
     }
 
     /**
-     * @return 用户信息
+     * 当前登录用户信息。
      */
-    public UserInfoRes userInfo() {
-        Long userId = WebContextFacade.getRequestContext().getUserId();
-        SysUser sysUser = sysUserService.getById(userId);
-        if (sysUser == null) {
-            return new UserInfoRes();
+    @Transactional(readOnly = true)
+    public UserInfoRes userInfo(Authentication authentication) {
+        Jwt jwt = jwtOf(authentication);
+        if (jwt == null) {
+            throw BusinessException.unauthorized(UserError.USER_NOT_EXIST);
         }
-        UserInfoRes userInfoRes = new UserInfoRes();
-        userInfoRes.setName(sysUser.getName());
-        userInfoRes.setPermissions(permissions());
-        return userInfoRes;
+        long userId = Long.parseLong(jwt.getSubject());
+        SysUser user = userRepository.findById(userId)
+                .orElseThrow(() -> BusinessException.notFound(UserError.USER_NOT_EXIST));
+        return new UserInfoRes(user.getId(), user.getAccount(), user.getName(), permissionService.codesOf(userId));
+    }
+
+    private Jwt jwtOf(Authentication authentication) {
+        return authentication instanceof JwtAuthenticationToken jwtAuthentication
+                ? jwtAuthentication.getToken()
+                : null;
     }
 }

@@ -49,3 +49,9 @@ out
 /**/.idea
 /**/target
 *.pdb
+
+# 本地上传目录
+/data/
+
+# 日志
+*.log

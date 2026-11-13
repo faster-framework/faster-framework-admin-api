@@ -1,11 +1,10 @@
 package cn.org.faster.framework.admin.auth.model;
 
-import lombok.Data;
-
 /**
+ * 登录响应。
+ *
+ * @param token 访问令牌
  * @author zhangbowen
  */
-@Data
-public class LoginRes {
-    private String token;
+public record LoginRes(String token) {
 }

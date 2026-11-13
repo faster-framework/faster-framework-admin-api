@@ -1,118 +1,129 @@
 package cn.org.faster.framework.admin.role.service;
 
+import cn.org.faster.framework.admin.common.error.BusinessException;
+import cn.org.faster.framework.admin.common.model.PageResult;
+import cn.org.faster.framework.admin.common.util.AuditSupport;
 import cn.org.faster.framework.admin.permission.entity.SysPermission;
+import cn.org.faster.framework.admin.permission.service.PermissionService;
 import cn.org.faster.framework.admin.permission.service.SysPermissionService;
 import cn.org.faster.framework.admin.role.entity.SysRole;
-import cn.org.faster.framework.admin.role.mapper.SysRoleMapper;
-import cn.org.faster.framework.admin.rolePermission.entity.SysRolePermission;
+import cn.org.faster.framework.admin.role.error.RoleError;
+import cn.org.faster.framework.admin.role.model.RoleQuery;
+import cn.org.faster.framework.admin.role.model.SysRoleReq;
+import cn.org.faster.framework.admin.role.repository.SysRoleRepository;
 import cn.org.faster.framework.admin.rolePermission.service.SysRolePermissionService;
-import cn.org.faster.framework.admin.shiro.ShiroRealm;
 import cn.org.faster.framework.admin.userRole.service.SysUserRoleService;
-import cn.org.faster.framework.web.context.model.SpringAppContextFacade;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
+ * 角色管理服务。
+ *
  * @author zhangbowen
  */
 @Service
 @Transactional
-public class SysRoleService extends ServiceImpl<SysRoleMapper, SysRole> {
-    @Autowired
-    private SysUserRoleService sysUserRoleService;
-    @Autowired
-    private SysRolePermissionService sysRolePermissionService;
-    @Autowired
-    private SysPermissionService sysPermissionService;
+public class SysRoleService {
+
+    private final SysRoleRepository roleRepository;
+
+    private final SysUserRoleService userRoleService;
+
+    private final SysRolePermissionService rolePermissionService;
+
+    private final SysPermissionService permissionService;
+
+    private final PermissionService rbacPermissionService;
+
+    private final AuditSupport auditSupport;
+
+    private final Clock clock;
+
+    public SysRoleService(SysRoleRepository roleRepository, SysUserRoleService userRoleService,
+                          SysRolePermissionService rolePermissionService, SysPermissionService permissionService,
+                          PermissionService rbacPermissionService, AuditSupport auditSupport, Clock clock) {
+        this.roleRepository = roleRepository;
+        this.userRoleService = userRoleService;
+        this.rolePermissionService = rolePermissionService;
+        this.permissionService = permissionService;
+        this.rbacPermissionService = rbacPermissionService;
+        this.auditSupport = auditSupport;
+        this.clock = clock;
+    }
+
+    @Transactional(readOnly = true)
+    public PageResult<SysRole> list(RoleQuery query) {
+        List<SysRole> records = roleRepository.page(query.getName(), query.getSize(), query.offset());
+        long total = roleRepository.count(query.getName());
+        return PageResult.of(records, total, query);
+    }
+
+    @Transactional(readOnly = true)
+    public SysRole info(long roleId) {
+        return roleRepository.findById(roleId)
+                .orElseThrow(() -> BusinessException.notFound(RoleError.NOT_EXIST));
+    }
+
+    public void add(SysRoleReq request) {
+        SysRole role = new SysRole();
+        role.setName(request.name());
+        auditSupport.markCreated(role);
+        roleRepository.insert(role);
+    }
+
+    public void update(long roleId, SysRoleReq request) {
+        info(roleId);
+        SysRole update = new SysRole();
+        update.setId(roleId);
+        update.setName(request.name());
+        auditSupport.markUpdated(update);
+        roleRepository.update(update);
+        rbacPermissionService.evictAll();
+    }
 
     /**
-     * 列表
+     * 批量删除角色（超级管理员角色不可删除）。
      *
-     * @param sysRole 角色实体
-     * @return 分页实体
+     * @param roleIds 角色 id 列表
      */
-    public IPage<SysRole> list(SysRole sysRole) {
-        LambdaQueryWrapper<SysRole> queryWrapper = new LambdaQueryWrapper<>();
-        if (!StringUtils.isEmpty(sysRole.getName())) {
-            queryWrapper.likeRight(SysRole::getName, sysRole.getName());
+    public void delete(List<Long> roleIds) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            return;
         }
-        queryWrapper.orderByDesc(SysRole::getCreateDate);
-        return super.baseMapper.selectPage(sysRole.toPage(), queryWrapper);
-    }
-
-    /**
-     * 详情
-     *
-     * @param roleId 角色id
-     * @return 角色详情
-     */
-    public SysRole info(Long roleId) {
-        return super.baseMapper.selectById(roleId);
-    }
-
-    /**
-     * 添加
-     *
-     * @param sysRole 角色实体
-     */
-    public void add(SysRole sysRole) {
-        sysRole.preInsert();
-        super.baseMapper.insert(sysRole);
-    }
-
-    /**
-     * 编辑
-     *
-     * @param sysRole 角色实体
-     */
-    public void update(SysRole sysRole) {
-        sysRole.preUpdate();
-        super.baseMapper.updateById(sysRole);
-    }
-
-    /**
-     * 删除
-     *
-     * @param id 角色id
-     */
-    public void delete(Long id) {
-        super.baseMapper.deleteById(id);
-        //删除角色用户关系
-        sysUserRoleService.deleteByRoleId(id);
-        //删除角色权限关系
-        sysRolePermissionService.deleteByRoleId(id);
-        //清空缓存
-        SpringAppContextFacade.applicationContext.getBean(ShiroRealm.class).getAuthorizationCache().clear();
-    }
-
-    /**
-     * 根据一个角色id获取权限id列表
-     *
-     * @param roleId 角色id
-     * @return 权限列表
-     */
-    public List<Long> permissions(Long roleId) {
-        boolean isAdmin = roleId == 0;
-        List<Long> permissionIdList;
-        //如果是管理员用户，查询全部权限
-        if (isAdmin) {
-            permissionIdList = sysPermissionService.selectAll().stream().map(SysPermission::getId).collect(Collectors.toList());
-        } else {
-            //如果不是管理员用户，查询该用户所有角色id
-            List<Long> roleIds = new ArrayList<>();
-            roleIds.add(roleId);
-            //根据角色id列表查询所有权限id
-            permissionIdList = sysRolePermissionService.selectByRoleIdList(roleIds).stream().map(SysRolePermission::getPermissionId).collect(Collectors.toList());
+        List<Long> deletable = new ArrayList<>();
+        for (Long roleId : roleIds) {
+            if (roleId == null) {
+                continue;
+            }
+            if (roleId == PermissionService.ADMIN_ROLE_ID) {
+                throw BusinessException.badRequest(RoleError.ADMIN_CANNOT_DELETE);
+            }
+            deletable.add(roleId);
         }
-        return permissionIdList;
+        roleRepository.softDelete(deletable, auditSupport.currentUserId(), LocalDateTime.now(clock));
+        for (Long roleId : deletable) {
+            userRoleService.deleteByRoleId(roleId);
+            rolePermissionService.deleteByRoleId(roleId);
+        }
+        rbacPermissionService.evictAll();
+    }
+
+    /**
+     * 角色已选择的权限 id；超级管理员返回全部权限 id。
+     *
+     * @param roleId 角色 id
+     * @return 权限 id 列表
+     */
+    @Transactional(readOnly = true)
+    public List<Long> permissions(long roleId) {
+        if (roleId == PermissionService.ADMIN_ROLE_ID) {
+            return permissionService.list().stream().map(SysPermission::getId).toList();
+        }
+        return rolePermissionService.permissionIds(roleId);
     }
 }

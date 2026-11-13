@@ -1,0 +1,55 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: faster-framework-admin-api
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/faster_admin?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  threads:
+    virtual:
+      enabled: false
+
+app:
+  jwt:
+    # 生产环境务必通过环境变量 APP_JWT_SECRET 注入（Base64，解码后 >= 32 字节）
+    secret: ${APP_JWT_SECRET:ZmFzdGVyLWFkbWluLWRldi1vbmx5LXNlY3JldC1rZXktMzJi}
+    issuer: faster-admin
+    ttl: 2h
+    clock-skew: 30s
+  auth:
+    # true：允许多端登录；false：单端登录，后登录的令牌会顶掉先前的令牌
+    multipart-terminal: true
+    default-password: ${APP_DEFAULT_PASSWORD:123456}
+  captcha:
+    enabled: true
+    ttl: 60s
+    length: 4
+    width: 120
+    height: 40
+  permission-cache:
+    ttl: 5m
+  id:
+    worker-id: ${APP_WORKER_ID:0}
+    data-center-id: ${APP_DATA_CENTER_ID:0}
+  upload:
+    dir: ${APP_UPLOAD_DIR:./data/upload}
+    url-prefix: /media
+    token-ttl: 30m
+    max-size: 10485760
+  cors:
+    allowed-origins: []
+
+logging:
+  level:
+    cn.org.faster: info

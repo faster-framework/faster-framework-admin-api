@@ -1,94 +1,75 @@
 package cn.org.faster.framework.admin.permission.controller;
 
+import cn.org.faster.framework.admin.common.entity.TreeNode;
 import cn.org.faster.framework.admin.permission.entity.SysPermission;
 import cn.org.faster.framework.admin.permission.model.SysPermissionAddReq;
 import cn.org.faster.framework.admin.permission.model.SysPermissionUpdateReq;
 import cn.org.faster.framework.admin.permission.service.SysPermissionService;
-import org.apache.shiro.authz.annotation.RequiresPermissions;
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
+ * 权限管理接口。
+ *
  * @author zhangbowen
  */
 @RestController
 @RequestMapping("/admin/sys/permissions")
 public class SysPermissionController {
-    @Autowired
-    private SysPermissionService sysPermissionService;
 
-    /**
-     * @return 权限列表
-     */
+    private final SysPermissionService permissionService;
+
+    public SysPermissionController(SysPermissionService permissionService) {
+        this.permissionService = permissionService;
+    }
+
     @GetMapping("/tree")
-    @RequiresPermissions("permissions:tree")
-    public ResponseEntity tree() {
-        return ResponseEntity.ok(sysPermissionService.treeList());
+    @PreAuthorize("hasAuthority('permissions:tree')")
+    public List<TreeNode> tree() {
+        return permissionService.tree();
     }
 
-    /**
-     * @return 权限列表
-     */
     @GetMapping
-    @RequiresPermissions("permissions:list")
-    public ResponseEntity list() {
-        return ResponseEntity.ok(sysPermissionService.list());
+    @PreAuthorize("hasAuthority('permissions:list')")
+    public List<SysPermission> list() {
+        return permissionService.list();
     }
 
-    /**
-     * @param permissionId 权限id
-     * @return 权限详情
-     */
     @GetMapping("/{permissionId}")
-    @RequiresPermissions("permissions:info")
-    public ResponseEntity info(@PathVariable Long permissionId) {
-        return ResponseEntity.ok(sysPermissionService.info(permissionId));
+    @PreAuthorize("hasAuthority('permissions:info')")
+    public SysPermission info(@PathVariable long permissionId) {
+        return permissionService.info(permissionId);
     }
 
-    /**
-     * 新增权限
-     *
-     * @param request 添加权限实体
-     * @return ResponseEntity
-     */
     @PostMapping
-    @RequiresPermissions("permissions:add")
-    public ResponseEntity add(@Validated @RequestBody SysPermissionAddReq request) {
-        SysPermission insert = new SysPermission();
-        BeanUtils.copyProperties(request, insert);
-        return sysPermissionService.add(insert);
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('permissions:add')")
+    public void add(@Valid @RequestBody SysPermissionAddReq request) {
+        permissionService.add(request);
     }
 
-    /**
-     * @param request      更新权限实体
-     * @param permissionId 权限id
-     * @return ResponseEntity
-     */
     @PutMapping("/{permissionId}")
-    @RequiresPermissions("permissions:modify")
-    public ResponseEntity update(@RequestBody SysPermissionUpdateReq request, @PathVariable Long permissionId) {
-        SysPermission update = new SysPermission();
-        BeanUtils.copyProperties(request, update);
-        update.setId(permissionId);
-        return sysPermissionService.update(update);
+    @PreAuthorize("hasAuthority('permissions:modify')")
+    public void update(@PathVariable long permissionId, @Valid @RequestBody SysPermissionUpdateReq request) {
+        permissionService.update(permissionId, request);
     }
 
-    /**
-     * 删除权限
-     *
-     * @param permissionIds 权限id列表
-     * @return ResponseEntity
-     */
     @DeleteMapping("/delete")
-    @RequiresPermissions("permissions:delete")
-    public ResponseEntity delete(@RequestBody List<Long> permissionIds) {
-        permissionIds.forEach(item -> sysPermissionService.delete(item));
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('permissions:delete')")
+    public void delete(@RequestBody List<Long> permissionIds) {
+        permissionService.delete(permissionIds);
     }
 }

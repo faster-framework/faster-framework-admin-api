@@ -1,134 +1,90 @@
 package cn.org.faster.framework.admin.role.controller;
 
+import cn.org.faster.framework.admin.common.model.ListWrapper;
+import cn.org.faster.framework.admin.common.model.PageResult;
 import cn.org.faster.framework.admin.role.entity.SysRole;
+import cn.org.faster.framework.admin.role.model.RoleQuery;
 import cn.org.faster.framework.admin.role.model.SysRoleReq;
 import cn.org.faster.framework.admin.role.service.SysRoleService;
 import cn.org.faster.framework.admin.rolePermission.entity.SysRolePermission;
-import cn.org.faster.framework.admin.rolePermission.error.RolePermissionError;
 import cn.org.faster.framework.admin.rolePermission.service.SysRolePermissionService;
-import cn.org.faster.framework.web.exception.model.ResponseErrorEntity;
-import cn.org.faster.framework.web.model.ListWrapper;
-import org.apache.shiro.authz.annotation.RequiresPermissions;
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
+ * 角色管理接口。
+ *
  * @author zhangbowen
  */
 @RestController
 @RequestMapping("/admin/sys/roles")
 public class SysRoleController {
-    @Autowired
-    private SysRoleService sysRoleService;
-    @Autowired
-    private SysRolePermissionService sysRolePermissionService;
 
-    /**
-     * 角色列表
-     *
-     * @param sysRole 角色实体
-     * @return 角色列表
-     */
+    private final SysRoleService roleService;
+
+    private final SysRolePermissionService rolePermissionService;
+
+    public SysRoleController(SysRoleService roleService, SysRolePermissionService rolePermissionService) {
+        this.roleService = roleService;
+        this.rolePermissionService = rolePermissionService;
+    }
+
     @GetMapping
-    @RequiresPermissions("roles:list")
-    public ResponseEntity list(SysRole sysRole) {
-        return ResponseEntity.ok(sysRoleService.list(sysRole));
+    @PreAuthorize("hasAuthority('roles:list')")
+    public PageResult<SysRole> list(@ModelAttribute RoleQuery query) {
+        return roleService.list(query);
     }
 
-    /**
-     * 角色详情
-     *
-     * @param roleId 角色id
-     * @return 角色详情
-     */
     @GetMapping("/{roleId}")
-    @RequiresPermissions("roles:info")
-    public ResponseEntity info(@PathVariable Long roleId) {
-        return ResponseEntity.ok(sysRoleService.info(roleId));
+    @PreAuthorize("hasAuthority('roles:info')")
+    public SysRole info(@PathVariable long roleId) {
+        return roleService.info(roleId);
     }
 
-    /**
-     * 新增角色
-     *
-     * @param request 角色添加实体
-     * @return ResponseEntity
-     */
     @PostMapping
-    @RequiresPermissions("roles:add")
-    public ResponseEntity add(@Validated @RequestBody SysRoleReq request) {
-        SysRole insert = new SysRole();
-        BeanUtils.copyProperties(request, insert);
-        sysRoleService.add(insert);
-        return new ResponseEntity<>(HttpStatus.CREATED);
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('roles:add')")
+    public void add(@Valid @RequestBody SysRoleReq request) {
+        roleService.add(request);
     }
 
-    /**
-     * 更新角色
-     *
-     * @param request 角色修改实体
-     * @param roleId  角色id
-     * @return ResponseEntity
-     */
     @PutMapping("/{roleId}")
-    @RequiresPermissions("roles:modify")
-    public ResponseEntity update(@RequestBody SysRoleReq request, @PathVariable Long roleId) {
-        SysRole update = new SysRole();
-        BeanUtils.copyProperties(request, update);
-        update.setId(roleId);
-        sysRoleService.update(update);
-        return new ResponseEntity<>(HttpStatus.CREATED);
+    @PreAuthorize("hasAuthority('roles:modify')")
+    public void update(@PathVariable long roleId, @Valid @RequestBody SysRoleReq request) {
+        roleService.update(roleId, request);
     }
 
-    /**
-     * 删除角色
-     *
-     * @param roleIds 角色id列表
-     * @return ResponseEntity
-     */
     @DeleteMapping("/delete")
-    @RequiresPermissions("roles:delete")
-    public ResponseEntity delete(@RequestBody List<Long> roleIds) {
-        roleIds.forEach(item -> {
-            if (item == 0L) {
-                return;
-            }
-            sysRoleService.delete(item);
-        });
-        return new ResponseEntity(HttpStatus.NO_CONTENT);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('roles:delete')")
+    public void delete(@RequestBody List<Long> roleIds) {
+        roleService.delete(roleIds);
     }
 
-    /**
-     * 批量为角色选择权限
-     *
-     * @param list   权限id列表
-     * @param roleId 角色id
-     * @return ResponseEntity
-     */
     @PutMapping("/{roleId}/permissions/choose")
-    @RequiresPermissions("roles:permissions:choose")
-    public ResponseEntity choosePermissions(@Validated @RequestBody ListWrapper<SysRolePermission> list, @PathVariable Long roleId) {
-        if (roleId == 0L) {
-            return ResponseErrorEntity.error(RolePermissionError.CANNOT_CHOOSE_ADMIN_PERMISSION, HttpStatus.BAD_REQUEST);
-        }
-        sysRolePermissionService.batchChoose(list.getList(), roleId);
-        return new ResponseEntity(HttpStatus.CREATED);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('roles:permissions:choose')")
+    public void choosePermissions(@PathVariable long roleId,
+                                  @Valid @RequestBody ListWrapper<SysRolePermission> body) {
+        rolePermissionService.batchChoose(roleId, body.list());
     }
 
-    /**
-     * 获取角色的权限id列表
-     *
-     * @param roleId 角色id
-     * @return 权限ids列表
-     */
     @GetMapping("/{roleId}/permissions")
-    @RequiresPermissions("roles:permissions:list")
-    public ResponseEntity permissions(@PathVariable Long roleId) {
-        return ResponseEntity.ok(sysRoleService.permissions(roleId));
+    @PreAuthorize("hasAuthority('roles:permissions:list')")
+    public List<Long> permissions(@PathVariable long roleId) {
+        return roleService.permissions(roleId);
     }
 }

@@ -1,32 +1,35 @@
 package cn.org.faster.framework.admin.dict.entity;
 
-import cn.org.faster.framework.mybatis.entity.BaseEntity;
-import com.baomidou.mybatisplus.annotation.TableName;
+import cn.org.faster.framework.admin.common.entity.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
+ * 数据字典实体。
+ *
  * @author faster-builder
- * 字典实体
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("sys_dict")
 public class SysDict extends BaseEntity {
+
     /**
-     * 字典key
+     * 字典 key。
      */
     private String name;
+
     /**
-     * 类型
+     * 字典类型。
      */
     private String type;
+
     /**
-     * 字典值
+     * 字典值（JSON 文本）。
      */
     private String dictValue;
+
     /**
-     * 展示状态（0.不展示1.展示）
+     * 展示状态：0 不展示，1 展示。
      */
     private Integer showStatus;
 }
